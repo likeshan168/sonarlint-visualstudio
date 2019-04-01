@@ -131,6 +131,14 @@ namespace SonarLint.VisualStudio.Integration
         {
             Debug.Assert(action != null);
 
+            //ThreadHelper.JoinableTaskFactory.Run(async delegate
+            //{
+            //    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            //    ThreadHelper.JoinableTaskFactory.RunAsyncAsVsTask(VsTaskRunContext.UIThreadIdlePriority, null);
+
+            //});
+
             this.host.UIDispatcher.BeginInvoke(
                   DispatcherPriority.ContextIdle,
                   action);
@@ -651,7 +659,7 @@ namespace SonarLint.VisualStudio.Integration
                 IDictionary<Language, SonarQubeQualityProfile> newProfiles = null;
                 try
                 {
-                    newProfiles = TryGetLatestProfilesAsync(binding, projectLanguages, token).GetAwaiter().GetResult();
+                    newProfiles = TryGetLatestProfilesSync(binding, projectLanguages, token);
                 }
                 catch (Exception)
                 {
@@ -702,6 +710,18 @@ namespace SonarLint.VisualStudio.Integration
                 }
 
                 return false;
+            }
+
+            private IDictionary<Language, SonarQubeQualityProfile> TryGetLatestProfilesSync(BoundSonarQubeProject binding,
+                IEnumerable<Language> projectLanguages, CancellationToken token)
+            {
+
+                var result = ThreadHelper.JoinableTaskFactory.Run< IDictionary<Language, SonarQubeQualityProfile>>(async delegate
+                {
+                    return await TryGetLatestProfilesAsync(binding, projectLanguages, token);
+                });
+
+                return result;
             }
 
             private async Task<IDictionary<Language, SonarQubeQualityProfile>> TryGetLatestProfilesAsync(BoundSonarQubeProject binding,

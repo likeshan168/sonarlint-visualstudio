@@ -29,6 +29,7 @@ using SonarLint.VisualStudio.Integration.Resources;
 using SonarLint.VisualStudio.Integration.TeamExplorer;
 using SonarLint.VisualStudio.Integration.WPF;
 using SonarQube.Client.Models;
+using VSThreadHelper = Microsoft.VisualStudio.Shell.ThreadHelper;
 
 namespace SonarLint.VisualStudio.Integration.State
 {
@@ -109,13 +110,17 @@ namespace SonarLint.VisualStudio.Integration.State
 
         public void SetProjects(ConnectionInformation connection, IEnumerable<SonarQubeProject> projects)
         {
-            if (this.Host.UIDispatcher.CheckAccess())
+            if (VSThreadHelper.CheckAccess())
             {
                 this.SetProjectsUIThread(connection, projects);
             }
             else
             {
-                this.Host.UIDispatcher.BeginInvoke(new Action(() => this.SetProjectsUIThread(connection, projects)));
+                VSThreadHelper.JoinableTaskFactory.Run(async delegate
+                {
+                    await VSThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                    this.SetProjectsUIThread(connection, projects);
+                });
             }
         }
 
@@ -172,6 +177,8 @@ namespace SonarLint.VisualStudio.Integration.State
 
         private void SetProjectsUIThread(ConnectionInformation connection, IEnumerable<SonarQubeProject> projects)
         {
+            Debug.Assert(VSThreadHelper.CheckAccess(), "Expecting to be on the UI thread");
+
             Debug.Assert(connection != null);
             this.ClearBindingErrorNotifications();
 

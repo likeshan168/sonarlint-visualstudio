@@ -143,10 +143,17 @@ namespace SonarLint.VisualStudio.Integration
                 int pfFound;
                 VSDOCUMENTPRIORITY[] pdwPriority = new VSDOCUMENTPRIORITY[1];
                 uint itemId;
-                if (ErrorHandler.Succeeded(vsProject.IsDocumentInProject(file, out pfFound, pdwPriority, out itemId)) && pfFound != 0)
+
+                var result = false;
+                Microsoft.VisualStudio.Shell.ThreadHelper.JoinableTaskFactory.Run(async delegate
                 {
-                    return true;
-                }
+                    await System.Threading.Tasks.Task.Yield();
+                    if (ErrorHandler.Succeeded(vsProject.IsDocumentInProject(file, out pfFound, pdwPriority, out itemId)) && pfFound != 0)
+                    {
+                        result = true;
+                    }
+                });
+                return result;
             }
 
             return false;

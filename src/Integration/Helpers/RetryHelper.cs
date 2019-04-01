@@ -37,7 +37,10 @@ namespace SonarLint.VisualStudio.Integration
                 }
                 catch (Exception)
                 {
-                    Task.Delay(delay).Wait();
+                    Microsoft.VisualStudio.Shell.ThreadHelper.JoinableTaskFactory.Run(async delegate
+                    {
+                        await Task.Delay(delay);
+                    });
                 }
             }
 

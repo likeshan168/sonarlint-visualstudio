@@ -30,6 +30,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using Microsoft.Alm.Authentication;
+using Microsoft.VisualStudio.Shell;
 using SonarLint.VisualStudio.Integration.Connection.UI;
 using SonarLint.VisualStudio.Integration.Progress;
 using SonarLint.VisualStudio.Integration.Resources;
@@ -100,11 +101,11 @@ namespace SonarLint.VisualStudio.Integration.Connection
             {
                 new ProgressStepDefinition(connectStepDisplayText, StepAttributes.Indeterminate | StepAttributes.BackgroundThread,
                     (cancellationToken, notifications) =>
-                    this.ConnectionStepAsync(connection, controller, notifications, cancellationToken).GetAwaiter().GetResult()),
+                    this.ConnectionStepSync(connection, controller, notifications, cancellationToken)),
 
                 new ProgressStepDefinition(connectStepDisplayText, StepAttributes.BackgroundThread,
                     (token, notifications) =>
-                    this.DownloadServiceParametersAsync(controller, notifications, token).GetAwaiter().GetResult()),
+                    this.DownloadServiceParametersSync(controller, notifications, token)),
 
                 };
         }
@@ -122,7 +123,18 @@ namespace SonarLint.VisualStudio.Integration.Connection
 
         #region Workflow steps
 
-        internal /* for testing purposes */ async Task ConnectionStepAsync(ConnectionInformation connection,
+        private System.Threading.Tasks.Task ConnectionStepSync(ConnectionInformation connection,
+            IProgressController controller, IProgressStepExecutionEvents notifications, CancellationToken cancellationToken)
+        {
+            ThreadHelper.JoinableTaskFactory.Run(async delegate
+            {
+                await ConnectionStepAsync(connection, controller, notifications, cancellationToken);
+            });
+
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        internal /* for testing purposes */ async System.Threading.Tasks.Task ConnectionStepAsync(ConnectionInformation connection,
             IProgressController controller, IProgressStepExecutionEvents notifications, CancellationToken cancellationToken)
         {
             this.host.ActiveSection?.UserNotifications?.HideNotification(NotificationIds.FailedToConnectId);
@@ -239,16 +251,32 @@ namespace SonarLint.VisualStudio.Integration.Connection
 
         private SonarQubeOrganization AskUserToSelectOrganizationOnUIThread(IEnumerable<SonarQubeOrganization> organizations)
         {
-            return Application.Current.Dispatcher.Invoke(() =>
-            {
+            SonarQubeOrganization selectedOrg = null;
+
+            ThreadHelper.JoinableTaskFactory.Run(async delegate {
+                // Switch to main thread
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                // Do your work on the main thread here.
                 var organizationDialog = new OrganizationSelectionWindow(organizations) { Owner = Application.Current.MainWindow };
                 var hasUserClickedOk = organizationDialog.ShowDialog().GetValueOrDefault();
 
-                return hasUserClickedOk ? organizationDialog.GetSelectedOrganization() : null;
+                selectedOrg = hasUserClickedOk ? organizationDialog.GetSelectedOrganization() : null;
             });
+            return selectedOrg;
         }
 
-        internal /*for testing purposes*/ async Task DownloadServiceParametersAsync(IProgressController controller,
+        private System.Threading.Tasks.Task DownloadServiceParametersSync(IProgressController controller,
+            IProgressStepExecutionEvents notifications, CancellationToken token)
+        {
+            ThreadHelper.JoinableTaskFactory.Run(async delegate
+            {
+                await DownloadServiceParametersAsync(controller, notifications, token);
+            });
+
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        internal /*for testing purposes*/ async System.Threading.Tasks.Task DownloadServiceParametersAsync(IProgressController controller,
             IProgressStepExecutionEvents notifications, CancellationToken token)
         {
             Debug.Assert(this.ConnectedServer != null);

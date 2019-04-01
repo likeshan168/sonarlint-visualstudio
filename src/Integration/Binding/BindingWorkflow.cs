@@ -27,12 +27,12 @@ using System.Text;
 using System.Threading;
 using EnvDTE;
 using Microsoft.VisualStudio.CodeAnalysis.RuleSets;
-using Microsoft.VisualStudio.Shell;
 using SonarLint.VisualStudio.Integration.Helpers;
 using SonarLint.VisualStudio.Integration.Progress;
 using SonarLint.VisualStudio.Integration.Resources;
 using SonarLint.VisualStudio.Progress.Controller;
 using SonarQube.Client.Models;
+using VSThreadHelper = Microsoft.VisualStudio.Shell.ThreadHelper;
 
 namespace SonarLint.VisualStudio.Integration.Binding
 {
@@ -167,7 +167,7 @@ namespace SonarLint.VisualStudio.Integration.Binding
 
                 // Fetch data from Sonar server and write shared ruleset file(s) to temporary location on disk
                 new ProgressStepDefinition(Strings.BindingProjectsDisplayMessage, StepAttributes.BackgroundThread,
-                        (token, notifications) => this.DownloadQualityProfileAsync(controller, notifications, this.GetBindingLanguages(), token).GetAwaiter().GetResult()),
+                        (token, notifications) => this.DownloadQualityProfileSync(controller, notifications, this.GetBindingLanguages(), token)),
 
                 //*****************************************************************
                 // NuGet package handling
@@ -225,7 +225,7 @@ namespace SonarLint.VisualStudio.Integration.Binding
 
         internal /*for testing purposes*/ void DiscoverProjects(IProgressController controller, IProgressStepExecutionEvents notifications)
         {
-            Debug.Assert(ThreadHelper.CheckAccess(), "Expected step to be run on the UI thread");
+            Debug.Assert(VSThreadHelper.CheckAccess(), "Expected step to be run on the UI thread");
 
             notifications.ProgressChanged(Strings.DiscoveringSolutionProjectsProgressMessage);
 
@@ -236,16 +236,37 @@ namespace SonarLint.VisualStudio.Integration.Binding
             this.BindingProjects.UnionWith(pluginAndPatternFilteredProjects);
             this.InformAboutFilteredOutProjects();
 
+            //var bindingInfoProvider = new SolutionBindingInformationProvider(this.host);
+            //var unboundProjects = bindingInfoProvider.GetUnboundProjects();
+
+            //var projectsToBind = unboundProjects.Intersect(pluginAndPatternFilteredProjects);
+            //var alreadyBoundProject = pluginAndPatternFilteredProjects.Except(unboundProjects);
+            ////var excludedProjects = this.projectSystem.GetSolutionProjects().Except(pluginAndPatternFilteredProjects);
+
+            ////this.InformAboutFilteredOutProjects(projectsToBind, excludedProjects, alreadyBoundProject);
+
             if (!this.BindingProjects.Any())
             {
                 AbortWorkflow(controller, CancellationToken.None);
             }
         }
 
+        private System.Threading.Tasks.Task DownloadQualityProfileSync(
+            IProgressController controller, IProgressStepExecutionEvents notificationEvents, IEnumerable<Language> languages,
+            CancellationToken cancellationToken)
+        {
+            VSThreadHelper.JoinableTaskFactory.Run(async delegate
+            {
+                await DownloadQualityProfileAsync(controller, notificationEvents, languages, cancellationToken);
+            });
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
         internal /*for testing purposes*/ async System.Threading.Tasks.Task DownloadQualityProfileAsync(
             IProgressController controller, IProgressStepExecutionEvents notificationEvents, IEnumerable<Language> languages,
             CancellationToken cancellationToken)
         {
+            Debug.Assert(!VSThreadHelper.CheckAccess(), "Expecting the DownloadQualityProfileAsync method to be called on a background thread");
             Debug.Assert(controller != null);
             Debug.Assert(notificationEvents != null);
 
@@ -336,7 +357,7 @@ namespace SonarLint.VisualStudio.Integration.Binding
 
         private void InitializeSolutionBindingOnUIThread(IProgressStepExecutionEvents notificationEvents)
         {
-            Debug.Assert(host.UIDispatcher.CheckAccess(), "Expected to run on UI thread");
+            Debug.Assert(VSThreadHelper.CheckAccess(), "Expected to run on UI thread");
 
             notificationEvents.ProgressChanged(Strings.RuleSetGenerationProgressMessage);
 
@@ -351,7 +372,7 @@ namespace SonarLint.VisualStudio.Integration.Binding
 
         private void FinishSolutionBindingOnUIThread(IProgressController controller, CancellationToken token)
         {
-            Debug.Assert(host.UIDispatcher.CheckAccess(), "Expected to run on UI thread");
+            Debug.Assert(VSThreadHelper.CheckAccess(), "Expected to run on UI thread");
 
             if (!this.solutionBindingOperation.CommitSolutionBinding())
             {
@@ -371,6 +392,8 @@ namespace SonarLint.VisualStudio.Integration.Binding
 
         internal /*for testing purposes*/ void SilentSaveSolutionIfDirty()
         {
+            Debug.Assert(VSThreadHelper.CheckAccess(), "Expected to run on UI thread");
+
             bool saved = VsShellUtils.SaveSolution(this.host, silent: true);
             Debug.Assert(saved, "Should not be cancellable");
         }

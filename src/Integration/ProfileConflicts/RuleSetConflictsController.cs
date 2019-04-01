@@ -27,6 +27,7 @@ using System.Windows.Input;
 using SonarLint.VisualStudio.Integration.Resources;
 using SonarLint.VisualStudio.Integration.TeamExplorer;
 using SonarLint.VisualStudio.Integration.WPF;
+using VSThreadHelper = Microsoft.VisualStudio.Shell.ThreadHelper;
 
 namespace SonarLint.VisualStudio.Integration.ProfileConflicts
 {
@@ -58,7 +59,7 @@ namespace SonarLint.VisualStudio.Integration.ProfileConflicts
         #region IRuleSetConflictsController
         public bool CheckForConflicts()
         {
-            Debug.Assert(this.host.UIDispatcher.CheckAccess(), "Expected to be called from the UI thread");
+            Debug.Assert(VSThreadHelper.CheckAccess(), "Expected to be called from the UI thread");
 
             var conflicts = conflictsManager.GetCurrentConflicts();
 
@@ -80,7 +81,7 @@ namespace SonarLint.VisualStudio.Integration.ProfileConflicts
 
         public void Clear()
         {
-            Debug.Assert(this.host.UIDispatcher.CheckAccess(), "Expected to be called from the UI thread");
+            Debug.Assert(VSThreadHelper.CheckAccess(), "Expected to be called from the UI thread");
 
             this.host.ActiveSection?.UserNotifications?.HideNotification(NotificationIds.RuleSetConflictsId);
         }

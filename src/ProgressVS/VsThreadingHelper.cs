@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SonarLint for Visual Studio
  * Copyright (C) 2016-2018 SonarSource SA
  * mailto:info AT sonarsource DOT com
@@ -106,9 +106,13 @@ namespace SonarLint.VisualStudio.Progress.Threading
         {
             IVsTask task = CreateTask<T>(serviceProvider, context, op, token);
             task.Start();
-            await task.GetAwaiter();
+
+            T result = (T)await task;
+
+            //await task.GetAwaiter();
             Debug.Assert(!task.IsFaulted, "Not expecting to be faulted and reach this far");
-            return (T)task.GetResult();
+            //return (T)task.GetResult();
+            return result;
         }
 
         /// <summary>
